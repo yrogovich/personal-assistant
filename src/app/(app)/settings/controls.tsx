@@ -19,6 +19,7 @@ import {
   setFeedEnabledAction,
   type ActionState,
 } from "@/server/actions/integrations";
+import { addPaymentAction, deletePaymentAction, savePaymentAction } from "@/server/actions/payments";
 import type { Feed, Provider } from "@/server/db/schema";
 
 function Status({ state }: { state: ActionState }) {
@@ -229,6 +230,107 @@ export function RemindersConnect() {
         {pending ? "Reading Reminders…" : "Connect Reminders"}
       </Button>
       <Status state={state} />
+    </form>
+  );
+}
+
+export type PaymentView = {
+  id: number;
+  name: string;
+  amount: number | null;
+  currency: string;
+  dayOfMonth: number;
+  method: "auto" | "manual";
+  senderMatch: string | null;
+};
+
+const selectClass = "border-input bg-background h-8 rounded-md border px-2 text-sm";
+
+function PaymentFields({ p, idPrefix }: { p?: PaymentView; idPrefix: string }) {
+  return (
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-[2fr_1fr_4.5rem_4.5rem_6.5rem_1.5fr]">
+      <div className="col-span-2 space-y-1 sm:col-span-1">
+        <Label htmlFor={`${idPrefix}-name`} className="text-xs">
+          Name
+        </Label>
+        <Input id={`${idPrefix}-name`} name="name" defaultValue={p?.name} required />
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor={`${idPrefix}-amount`} className="text-xs">
+          Amount
+        </Label>
+        <Input id={`${idPrefix}-amount`} name="amount" inputMode="decimal" defaultValue={p?.amount ?? ""} placeholder="—" />
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor={`${idPrefix}-currency`} className="text-xs">
+          Currency
+        </Label>
+        <Input id={`${idPrefix}-currency`} name="currency" defaultValue={p?.currency ?? "PLN"} maxLength={3} />
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor={`${idPrefix}-day`} className="text-xs">
+          Day
+        </Label>
+        <Input id={`${idPrefix}-day`} name="dayOfMonth" type="number" min={1} max={31} defaultValue={p?.dayOfMonth ?? 1} required />
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor={`${idPrefix}-method`} className="text-xs">
+          Paid
+        </Label>
+        <select id={`${idPrefix}-method`} name="method" defaultValue={p?.method ?? "manual"} className={selectClass}>
+          <option value="manual">By me</option>
+          <option value="auto">Automatically</option>
+        </select>
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor={`${idPrefix}-match`} className="text-xs">
+          Mail from
+        </Label>
+        <Input id={`${idPrefix}-match`} name="senderMatch" defaultValue={p?.senderMatch ?? ""} placeholder="e.g. infakt.pl" />
+      </div>
+    </div>
+  );
+}
+
+export function PaymentRow({ p }: { p: PaymentView }) {
+  const [state, action, pending] = useActionState(savePaymentAction, null);
+  const [deleting, start] = useTransition();
+  return (
+    <form action={action} className="space-y-2 py-3">
+      <input type="hidden" name="id" value={p.id} />
+      <PaymentFields p={p} idPrefix={`pay-${p.id}`} />
+      <div className="flex items-center gap-2">
+        <Button type="submit" size="xs" variant="outline" disabled={pending}>
+          {pending ? "Saving…" : "Save"}
+        </Button>
+        <Button
+          type="button"
+          size="xs"
+          variant="ghost"
+          disabled={deleting}
+          onClick={() => {
+            if (confirm(`Remove ${p.name}?`)) start(() => void deletePaymentAction(p.id));
+          }}
+        >
+          Remove
+        </Button>
+        <Status state={state} />
+      </div>
+    </form>
+  );
+}
+
+export function AddPaymentForm() {
+  const [state, action, pending] = useActionState(addPaymentAction, null);
+  return (
+    <form action={action} className="space-y-2 pt-3">
+      <PaymentFields idPrefix="pay-new" />
+      <div className="flex items-center gap-2">
+        <Button type="submit" size="xs" disabled={pending}>
+          {pending ? "Adding…" : "Add payment"}
+        </Button>
+        <Status state={state} />
+      </div>
     </form>
   );
 }

@@ -33,7 +33,7 @@ Keep `APP_ENCRYPTION_KEY` safe: if you lose it, stored connections can't be decr
 5. **Data access → Add or remove scopes**, add:
    - `.../auth/calendar.readonly`: read all your calendars
    - `.../auth/calendar.app.created`: create the "Plan" calendar and manage events **only in calendars this app created**
-   - `.../auth/gmail.readonly`: read mail (used from build step 5; requested now so you only consent once)
+   - `.../auth/gmail.modify`: read mail, and add folder labels and stars you approve (never sends, deletes or archives). If you connected before this was added, press **Reconnect** in Settings → Google
 6. **Clients → Create client → Web application**:
    - Authorized JavaScript origin: `http://localhost:3000`
    - Authorized redirect URIs:
@@ -49,7 +49,7 @@ Keep `APP_ENCRYPTION_KEY` safe: if you lose it, stored connections can't be decr
 | Who can sign in | Only listed test users | Anyone, capped at 100 users ever. Our allow-list still admits only you |
 | Refresh token lifetime | **Expires after 7 days** for apps asking more than name/email: you'd reconnect Google every week | Long-lived. Revoked only if you revoke it, change your Google password (Gmail scopes), or leave it unused for 6 months |
 | Consent screen | Normal | Shows **"Google hasn't verified this app"**. Click *Advanced → Go to Personal Dashboard (unsafe)*. It's your own app |
-| Verification | Not needed | Not needed for personal use. `gmail.readonly` is a *restricted* scope: verifying it for the public would require a paid third-party security assessment (CASA), which makes no sense for a single-user app |
+| Verification | Not needed | Not needed for personal use. `gmail.modify` is a *restricted* scope: verifying it for the public would require a paid third-party security assessment (CASA), which makes no sense for a single-user app |
 
 If Google ever stops refreshing (password change, revoked access), the dashboard shows "reconnect needed" and Settings has a **Reconnect** button.
 

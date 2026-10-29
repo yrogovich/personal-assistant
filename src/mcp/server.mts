@@ -4,7 +4,8 @@
 // - Read tools return the same minimised data the API would get (no event titles of others' meetings,
 //   mail as sender name + subject + snippet only, no credentials ever).
 // - Write tools only create *proposals* (day blocks, mail categories, step suggestions, review drafts).
-//   Nothing reaches Google Calendar or Notion until you approve it in the dashboard.
+//   Nothing reaches Google Calendar or Notion until you approve it in the dashboard. The one direct
+//   write is a Gmail folder label (sorting); stars are only suggested.
 // - Every write is logged in the AI log (model "claude-desktop").
 //
 // Run via scripts/mcp-server.sh (stdio). `pnpm mcp:config` prints the Claude Desktop config.
@@ -31,9 +32,10 @@ const { StdioServerTransport } = await import("@modelcontextprotocol/sdk/server/
 const { z } = await import("zod");
 const { migrate } = await import("drizzle-orm/libsql/migrator");
 const { db } = await import("../server/db/client");
-const { aiRun, BLOCK_KINDS, MAIL_CATEGORIES } = await import("../server/db/schema");
+const { aiRun, BLOCK_KINDS, MAIL_CATEGORIES, MAIL_LABELS } = await import("../server/db/schema");
 const { buildPlanInput, PLAN_SYSTEM, storePlan } = await import("../server/ai/morning-plan");
 const { MAIL_SYSTEM, applyMailCategories, unsortedMail } = await import("../server/ai/mail-summary");
+const { applyGmailLabels } = await import("../server/integrations/google/gmail");
 const { STEPS_GUIDE, stepsContext, storeStepsProposal } = await import("../server/ai/break-steps");
 const { REVIEW_GUIDE, reviewContext, upsertReviewDraft } = await import("../server/ai/review");
 const { getWeek } = await import("../server/queries/week");
@@ -79,7 +81,7 @@ server.registerTool(
   {
     title: "Get today's planning context",
     description:
-      "Today's free slots, busy times, rules, weekly progress, open goal steps, due reminders and mail that needs a reply. Read this before propose_day_plan.",
+      "Today's free slots, busy times, rules, weekly progress, open goal steps, due reminders, payments that need attention and mail that needs a reply. Read this before propose_day_plan.",
     annotations: { readOnlyHint: true },
   },
   async () => {
@@ -142,14 +144,28 @@ server.registerTool(
   "categorize_mail",
   {
     title: "Categorise mail",
-    description: "Store a category (needs_reply / fyi / ignore) and a one-line summary per thread id. Never sends mail.",
+    description:
+      "Store per thread id: a category (needs_reply / fyi / ignore), a one-line summary, a folder label (or null) and whether it's worth a star. The label is added in Gmail; a star is only suggested for the person to approve. Never sends, deletes or archives mail.",
     inputSchema: {
-      threads: z.array(z.object({ id: z.string(), category: z.enum(MAIL_CATEGORIES), summary: z.string() })),
+      threads: z.array(
+        z.object({
+          id: z.string(),
+          category: z.enum(MAIL_CATEGORIES),
+          summary: z.string(),
+          label: z.enum(MAIL_LABELS).nullable().optional(),
+          star: z.boolean().optional(),
+        }),
+      ),
     },
   },
   async ({ threads }) => {
     await logDesktopRun("mail_summary", { threads });
-    return json({ updated: await applyMailCategories(threads) });
+    const updated = await applyMailCategories(threads);
+    const labelled = await applyGmailLabels().catch((err) => {
+      console.error("[mcp] labels:", err instanceof Error ? err.message : err);
+      return 0;
+    });
+    return json({ updated, labelled_in_gmail: labelled, note: `Star suggestions wait for approval at ${DASHBOARD}/today.` });
   },
 );
 

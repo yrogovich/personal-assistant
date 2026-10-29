@@ -5,12 +5,15 @@ import { AuthRevokedError, getCredentials, saveCredentials } from "../store";
 
 // Requested once at connect so later steps don't need a second consent screen.
 // calendar.app.created only lets the app manage calendars it creates itself (the "Plan" calendar).
+// gmail.modify is used only to add labels and stars (see google/gmail.ts); the app never sends,
+// deletes or archives mail.
+export const GMAIL_MODIFY = "https://www.googleapis.com/auth/gmail.modify";
 export const GOOGLE_SCOPES = [
   "openid",
   "email",
   "https://www.googleapis.com/auth/calendar.readonly",
   "https://www.googleapis.com/auth/calendar.app.created",
-  "https://www.googleapis.com/auth/gmail.readonly",
+  GMAIL_MODIFY,
 ];
 
 type GoogleCredentials = { refreshToken: string; scope: string };
@@ -54,6 +57,12 @@ export async function googleClient(): Promise<OAuth2Client | null> {
   const c = client();
   c.setCredentials({ refresh_token: creds.refreshToken });
   return c;
+}
+
+/** Whether the stored Google grant includes a scope (older connections only have gmail.readonly). */
+export async function googleHasScope(scope: string): Promise<boolean> {
+  const creds = await getCredentials<GoogleCredentials>("google");
+  return Boolean(creds?.scope.split(" ").includes(scope));
 }
 
 export async function revokeGoogle(): Promise<void> {

@@ -4,6 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireUser } from "@/server/auth";
 import { getMonth, type GoalProgress } from "@/server/queries/month";
+import { getPaymentSummary } from "@/server/payments";
+import Link from "next/link";
 
 export const metadata = { title: "Month · Dashboard" };
 
@@ -45,7 +47,9 @@ function GoalRow({ g }: { g: GoalProgress }) {
 
 export default async function MonthPage() {
   await requireUser();
-  const m = await getMonth();
+  const [m, pay] = await Promise.all([getMonth(), getPaymentSummary()]);
+  const money = (amount: number, currency: string) =>
+    new Intl.NumberFormat("pl-PL", { style: "currency", currency, maximumFractionDigits: 0 }).format(amount);
   const main = m.progress.filter((g) => g.priority === "main" && g.status === "active");
   const secondary = m.progress.filter((g) => g.priority === "secondary" && g.status === "active");
   const byCategory = (list: GoalProgress[]) =>
@@ -203,6 +207,45 @@ export default async function MonthPage() {
           )}
         </CardContent>
       </Card>
+
+      {pay.count > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              <h2>Payments</h2>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            <p>
+              {pay.count} monthly payment(s)
+              {pay.totals.length > 0 && <> · about {pay.totals.map((t) => money(t.amount, t.currency)).join(" + ")} a month</>}
+              {pay.problems > 0 && <span className="text-destructive"> · {pay.problems} failed</span>}
+            </p>
+            {pay.missingAmounts > 0 && (
+              <p className="text-muted-foreground text-xs">
+                {pay.missingAmounts} without an amount yet.{" "}
+                <Link href="/settings" className="underline underline-offset-2">
+                  Add them in Settings
+                </Link>
+              </p>
+            )}
+            <details>
+              <summary className="text-muted-foreground cursor-pointer text-xs">Show all</summary>
+              <ul className="mt-2 space-y-1">
+                {pay.payments.map((p) => (
+                  <li key={p.id} className="flex flex-wrap gap-x-2">
+                    <span>{p.name}</span>
+                    <span className="text-muted-foreground text-xs">
+                      day {p.dayOfMonth} · {p.method === "auto" ? "automatic" : "by you"}
+                      {p.amount !== null && ` · ${money(p.amount, p.currency)}`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

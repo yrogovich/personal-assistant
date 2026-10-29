@@ -8,6 +8,8 @@ import Link from "next/link";
 import { models } from "@/server/ai/client";
 import { stravaConfigured } from "@/server/integrations/strava";
 import { getSetting } from "@/server/settings";
+import { canSortGmail } from "@/server/integrations/google/gmail";
+import { listPayments } from "@/server/payments";
 import {
   CalendarRow,
   DisconnectButton,
@@ -19,6 +21,8 @@ import {
   KeywordsForm,
   NotionForm,
   NotionRetryButton,
+  AddPaymentForm,
+  PaymentRow,
 } from "./controls";
 
 export const metadata = { title: "Settings · Dashboard" };
@@ -40,12 +44,15 @@ function FeedLine({ f }: { f: FeedStatus }) {
 export default async function SettingsPage({ searchParams }: PageProps<"/settings">) {
   await requireUser();
   const { error, connected } = await searchParams;
-  const [conns, feeds, calendars, keywords, notionIds] = await Promise.all([
+  const [conns, feeds, calendars, keywords, notionIds, payments, sortsGmail, mailLabels] = await Promise.all([
     listIntegrations(),
     getFeedStatuses(["google_calendar", "gmail", "icloud_calendar", "icloud_mail", "notion", "strava", "hevy", "reminders"]),
     getCalendars(),
     getSetting("eventKeywords"),
     getSetting("notionDataSources"),
+    listPayments(),
+    canSortGmail(),
+    getSetting("mailLabels"),
   ]);
   const google = conns.find((c) => c.provider === "google");
   const icloud = conns.find((c) => c.provider === "icloud");
@@ -79,7 +86,9 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
             <h2>Google</h2>
           </CardTitle>
           <CardDescription>
-            {google ? `Connected as ${google.account}` : "Calendar, plus Gmail read-only (unread subject, sender and snippet)."}
+            {google
+              ? `Connected as ${google.account}`
+              : "Calendar, plus Gmail (unread subject, sender and snippet), sorted into your folders."}
           </CardDescription>
           <CardAction className="flex gap-2">
             {/* Plain links: the OAuth flow is a full-page redirect. */}
@@ -94,6 +103,11 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
             {google.status === "error" && <p className="text-destructive text-sm">{google.lastError}</p>}
             <FeedLine f={feed("google_calendar")} />
             <FeedLine f={feed("gmail")} />
+            <p className="text-muted-foreground text-xs">
+              {sortsGmail
+                ? `New mail is labelled ${Object.values(mailLabels).map((n) => `“${n}”`).join(", ")}. Nothing is sent, deleted, archived or marked read; stars only when you press Star on Today.`
+                : "Gmail is read-only. Press Reconnect to let the app sort new mail into your folders (labels and stars only)."}
+            </p>
             <CalendarList calendars={calendars.filter((c) => c.source === "google")} />
           </CardContent>
         )}
@@ -234,6 +248,26 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
         </CardHeader>
         <CardContent className="space-y-4">
           {reminders ? <FeedLine f={feed("reminders")} /> : <RemindersConnect />}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <h2>Monthly payments</h2>
+          </CardTitle>
+          <CardDescription>
+            Today shows a payment paid by you 3 days before its day until you mark it done, and an automatic one only when
+            mail from it says the payment failed (“Mail from” is part of its sender or subject).
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="divide-y">
+            {payments.map((p) => (
+              <PaymentRow key={p.id} p={p} />
+            ))}
+          </div>
+          <AddPaymentForm />
         </CardContent>
       </Card>
 

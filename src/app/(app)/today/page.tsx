@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { SyncStatus } from "@/components/sync-status";
 import { MailSummary } from "@/components/today/mail-summary";
+import { PaymentAlerts } from "@/components/today/payment-alerts";
 import {
   AutoPlan,
   BlockRow,
@@ -20,6 +21,8 @@ import { getFeedStatuses } from "@/server/queries/integrations";
 import { getQuickLogs } from "@/server/queries/logs";
 import { getDueReminders, getMail, getTodayPlan } from "@/server/queries/plan";
 import { getDayTimeline } from "@/server/queries/today";
+import { canSortGmail } from "@/server/integrations/google/gmail";
+import { getPaymentAlerts } from "@/server/payments";
 
 export const metadata = { title: "Today · Dashboard" };
 
@@ -27,13 +30,15 @@ export default async function TodayPage() {
   await requireUser();
   const tz = env().APP_TIMEZONE;
   const now = new Date();
-  const [{ allDay, timed }, feeds, logs, today, mail, reminders] = await Promise.all([
+  const [{ allDay, timed }, feeds, logs, today, mail, reminders, payments, sortsGmail] = await Promise.all([
     getDayTimeline(now),
     getFeedStatuses(["google_calendar", "icloud_calendar", "gmail", "icloud_mail", "notion", "strava", "hevy", "reminders"]),
     getQuickLogs(now),
     getTodayPlan(now),
     getMail(),
     getDueReminders(now),
+    getPaymentAlerts(now),
+    canSortGmail(),
   ]);
   const mailConnected = feeds.some((f) => (f.key === "gmail" || f.key === "icloud_mail") && f.connected);
   const remindersConnected = feeds.some((f) => f.key === "reminders" && f.connected);
@@ -167,7 +172,12 @@ export default async function TodayPage() {
           <CardTitle>
             <h2>Mail</h2>
           </CardTitle>
-          <CardDescription>Unread from the last 3 days, Gmail and iCloud. Read-only.</CardDescription>
+          <CardDescription>
+            Unread from the last 3 days, Gmail and iCloud.{" "}
+            {sortsGmail
+              ? "Gmail threads are sorted into your folders; stars only when you press Star."
+              : "Read-only. Reconnect Google in Settings to sort Gmail into folders."}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {mailConnected ? (
@@ -183,6 +193,20 @@ export default async function TodayPage() {
           )}
         </CardContent>
       </Card>
+
+      {payments.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              <h2>Payments</h2>
+            </CardTitle>
+            <CardDescription>Only what needs you: due in the next few days, overdue, or a failed automatic payment.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <PaymentAlerts alerts={payments} />
+          </CardContent>
+        </Card>
+      )}
 
       {remindersConnected && (
         <Card>

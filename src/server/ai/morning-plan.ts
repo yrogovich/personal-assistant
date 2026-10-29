@@ -7,13 +7,14 @@ import { BLOCK_KINDS, calendar, dayPlan, event, mailThread, proposedBlock, remin
 import { freeIntervals, type Interval } from "../domain/free-slots";
 import { loadWeekFacts, readingStatus, rings, weekRisks } from "../domain/habits";
 import { env } from "../env";
+import { getPaymentAlerts } from "../payments";
 import { getSetting } from "../settings";
 import { models, runStructured } from "./client";
 
 // The model only proposes. Blocks are stored as "proposed" and reach Google Calendar only when
 // you press Approve (see actions/plan.ts). Inputs are minimised: free/busy times without event
-// titles (except your run/gym sessions), open steps, weekly progress, due reminders, and the
-// subjects/senders of mail that needs a reply.
+// titles (except your run/gym sessions), open steps, weekly progress, due reminders, payments that
+// need you (name and due date, no amounts), and the subjects/senders of mail that needs a reply.
 
 export const PLAN_SYSTEM = `You plan one day for one person, inside their personal dashboard. You only propose; they approve each block.
 
@@ -26,7 +27,7 @@ Rules you must follow:
 - Leave breathing room: 3–5 blocks is plenty. Don't fill every free minute; keep evenings after 20:00 light.
 - Add a reading block when reading is behind pace.
 
-Write the brief as 3–5 short lines (separated by "\\n"), plain English, second person, no greetings: what matters today, what's at risk this week, any mail that needs a reply. Do not invent facts.
+Write the brief as 3–5 short lines (separated by "\\n"), plain English, second person, no greetings: what matters today, what's at risk this week, any payment that's due or failed, any mail that needs a reply. Do not invent facts.
 top_step_ids: up to 3 ids from open_steps that matter most today.
 Each block gets a short title and a one-sentence reason.`;
 
@@ -117,12 +118,13 @@ export async function buildPlanInput(now: Date) {
   const wd = isoWeekday(now, tz) as keyof typeof rhythm;
   const { end: dayEnd } = dayBounds(now, tz);
 
-  const [steps, busy, reminders, needsReply, mailCounts] = await Promise.all([
+  const [steps, busy, reminders, needsReply, mailCounts, payments] = await Promise.all([
     openSteps(),
     busyToday(now, tz),
     db().query.reminder.findMany({ where: lt(reminder.dueAt, dayEnd), orderBy: asc(reminder.dueAt), limit: 15 }),
     db().query.mailThread.findMany({ where: eq(mailThread.category, "needs_reply"), orderBy: desc(mailThread.receivedAt), limit: 10 }),
     db().query.mailThread.findMany({ columns: { category: true } }),
+    getPaymentAlerts(now),
   ]);
 
   const atWork = freeAtWork && freeAtWork.date === todayKey ? freeAtWork : null;
@@ -161,6 +163,10 @@ export async function buildPlanInput(now: Date) {
       reminders_due: reminders.map((r) => ({
         title: r.title,
         due: r.dueAt ? (r.dueAt < now ? "overdue" : r.allDay ? "today" : `today ${hhmm(r.dueAt, tz)}`) : "flagged",
+      })),
+      payments: payments.map((p) => ({
+        name: p.name,
+        status: p.kind === "failed" ? "automatic payment failed" : p.kind === "overdue" ? `overdue since ${p.dueKey}` : `due ${p.dueKey}`,
       })),
       mail: {
         needs_reply: needsReply.map((m) => ({ from: m.sender.replace(/<.*>/, "").trim() || m.sender, subject: m.subject })),

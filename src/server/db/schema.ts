@@ -252,6 +252,10 @@ export const workoutSet = sqliteTable(
 export const MAIL_CATEGORIES = ["needs_reply", "fyi", "ignore"] as const;
 export type MailCategory = (typeof MAIL_CATEGORIES)[number];
 
+/** Gmail folders (labels) the app sorts into. Which real Gmail label each one maps to is a setting. */
+export const MAIL_LABELS = ["security", "money", "orders", "newsletters"] as const;
+export type MailLabel = (typeof MAIL_LABELS)[number];
+
 /** Only what the summary needs: sender, subject, snippet. Bodies are never stored. */
 export const mailThread = sqliteTable(
   "mail_thread",
@@ -267,6 +271,11 @@ export const mailThread = sqliteTable(
     category: text("category", { enum: MAIL_CATEGORIES }),
     summary: text("summary"),
     summarizedAt: timestamp("summarized_at"),
+    label: text("label", { enum: MAIL_LABELS }), // from a sender rule or the AI
+    labelSource: text("label_source", { enum: ["rule", "ai"] }),
+    labeledAt: timestamp("labeled_at"), // when the label was added in Gmail
+    suggestStar: integer("suggest_star", { mode: "boolean" }).notNull().default(false),
+    starDecision: text("star_decision", { enum: ["starred", "dismissed"] }),
   },
   (t) => [index("mail_thread_received_idx").on(t.receivedAt)],
 );
@@ -279,6 +288,26 @@ export const reminder = sqliteTable("reminder", {
   allDay: integer("all_day", { mode: "boolean" }).notNull().default(false),
   flagged: integer("flagged", { mode: "boolean" }).notNull().default(false),
   priority: integer("priority").notNull().default(0),
+});
+
+// ── Recurring payments ─────────────────────────────────────────────────────
+
+/**
+ * A monthly payment or money chore. Auto ones only surface when a "payment failed" mail arrives;
+ * manual ones surface a few days before their day until you mark them done for the month.
+ */
+export const recurringPayment = sqliteTable("recurring_payment", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  amount: real("amount"), // null = not filled in yet
+  currency: text("currency").notNull().default("PLN"),
+  dayOfMonth: integer("day_of_month").notNull(), // 1–31; clamped to the month's last day
+  method: text("method", { enum: ["auto", "manual"] }).notNull(),
+  senderMatch: text("sender_match"), // part of the sender or subject of this payment's mail, e.g. "infakt.pl"
+  doneMonth: text("done_month"), // YYYY-MM of the last month you marked it done (manual)
+  problem: text("problem"), // subject of a "payment failed" mail, until you clear it (auto)
+  problemAt: timestamp("problem_at"),
+  createdAt: createdAt(),
 });
 
 // ── Day plan and AI log ────────────────────────────────────────────────────

@@ -49,11 +49,16 @@ export async function getTodayPlan(now = new Date()) {
 export async function getMail() {
   const threads = await db().query.mailThread.findMany({ orderBy: desc(mailThread.receivedAt) });
   const withLink = threads.map((t) => ({ ...t, url: t.source === "gmail" ? gmailThreadUrl(t.threadId) : null }));
+  // A star suggestion on a thread that doesn't need a reply (e.g. a failed payment) is pulled out
+  // of the collapsed groups so it isn't missed.
+  const important = (t: (typeof withLink)[number]) => t.suggestStar && !t.starDecision && t.category !== "needs_reply";
+  const rest = withLink.filter((t) => !important(t));
   return {
-    needsReply: withLink.filter((t) => t.category === "needs_reply"),
-    fyi: withLink.filter((t) => t.category === "fyi"),
-    ignore: withLink.filter((t) => t.category === "ignore"),
-    unsorted: withLink.filter((t) => !t.category),
+    needsReply: rest.filter((t) => t.category === "needs_reply"),
+    important: withLink.filter(important),
+    fyi: rest.filter((t) => t.category === "fyi"),
+    ignore: rest.filter((t) => t.category === "ignore"),
+    unsorted: rest.filter((t) => !t.category),
   };
 }
 

@@ -1,10 +1,14 @@
 import { formatTime } from "@/lib/time";
+import type { MailLabel } from "@/server/db/schema";
 import type { getMail } from "@/server/queries/plan";
+import { StarSuggestion } from "./mail-controls";
 
 type Mail = Awaited<ReturnType<typeof getMail>>;
 type Thread = Mail["needsReply"][number];
 
 const senderName = (s: string) => s.replace(/<.*>/, "").replace(/"/g, "").trim() || s;
+
+const LABEL_NAME: Record<MailLabel, string> = { security: "Security", money: "Money", orders: "Orders", newsletters: "Newsletters" };
 
 function ThreadRow({ t, tz }: { t: Thread; tz: string }) {
   return (
@@ -13,7 +17,10 @@ function ThreadRow({ t, tz }: { t: Thread; tz: string }) {
         <span className="font-medium">{senderName(t.sender)}</span>
         <span className="text-muted-foreground text-xs">
           {t.source === "gmail" ? "Gmail" : "iCloud"} · {formatTime(t.receivedAt, tz)}
+          {t.label && ` · ${LABEL_NAME[t.label]}`}
+          {t.starDecision === "starred" && " · ★"}
         </span>
+        {t.suggestStar && !t.starDecision && t.source === "gmail" && <StarSuggestion id={t.id} />}
       </div>
       <div className="text-sm">
         {t.url ? (
@@ -46,11 +53,12 @@ function Group({ title, threads, tz, open }: { title: string; threads: Thread[];
 }
 
 export function MailSummary({ mail, tz }: { mail: Mail; tz: string }) {
-  const total = mail.needsReply.length + mail.fyi.length + mail.ignore.length + mail.unsorted.length;
+  const total = mail.needsReply.length + mail.important.length + mail.fyi.length + mail.ignore.length + mail.unsorted.length;
   if (total === 0) return <p className="text-muted-foreground text-sm">Inbox zero on unread mail.</p>;
   return (
     <div className="space-y-3">
       <Group title="Needs reply" threads={mail.needsReply} tz={tz} open />
+      <Group title="Worth a look" threads={mail.important} tz={tz} open />
       <Group title="FYI" threads={mail.fyi} tz={tz} />
       <Group title="Ignore" threads={mail.ignore} tz={tz} />
       <Group title="Not sorted yet" threads={mail.unsorted} tz={tz} />

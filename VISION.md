@@ -26,7 +26,7 @@ AI should do the boring part (reading everything, finding free time, drafting th
 |---|---|---|---|
 | Google Calendar | Events, free/busy, create approved blocks | Google OAuth, Calendar API | Read + write |
 | iCloud Calendar | Events, free/busy | CalDAV (`caldav.icloud.com`) with an app-specific password | Read; write optional |
-| Gmail | Unread/important threads → AI summary | Google OAuth, Gmail API (`gmail.readonly`) | Restricted scope: fine for personal use, but check token expiry rules for apps in "Testing" mode |
+| Gmail | Unread/important threads → AI summary; sorted into folders (labels), stars on approval | Google OAuth, Gmail API (`gmail.modify`) | Restricted scope: fine for personal use, but check token expiry rules for apps in "Testing" mode. Writes are labels and approved stars only (see docs/MAIL_AND_PAYMENTS.md) |
 | iCloud Mail | Unread/recent → AI summary | IMAP (`imap.mail.me.com:993`) with an app-specific password | Read-only |
 | Notion | Goals, steps, reading list, notes, reviews | Notion internal integration, databases | Source of truth for goals; two-way sync |
 | Strava | Runs | Strava OAuth, polled on sync | Auto-checks planned runs |
@@ -74,7 +74,7 @@ Current focus (main goals): **Reels** and **Work**. Everything else is secondary
 
 ## Screens
 
-1. **Today**: AI morning brief (3–5 lines), timeline of today's events from both calendars, suggested blocks to approve, top 3 steps, mail summary (Gmail + iCloud, grouped: needs reply / FYI / ignore), quick reading log.
+1. **Today**: AI morning brief (3–5 lines), timeline of today's events from both calendars, suggested blocks to approve, top 3 steps, mail summary (Gmail + iCloud, grouped: needs reply / worth a look / FYI / ignore), payments that need me (only when something is due or failed), quick reading log.
 2. **Week**: habit rings (2 trainings, 3 runs, reading), goal steps done vs planned, the week's calendar at a glance, what's at risk ("no run planned before Friday").
 3. **Month**: progress per main/secondary goal, habit consistency heatmap, run totals from Strava, books finished.
 4. **Goals**: main and secondary goals with their steps; add/edit (writes to Notion); AI can break a goal into steps on request.

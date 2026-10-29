@@ -17,7 +17,7 @@ const SNIPPET_MAX = 300;
 
 /**
  * Replaces one source's cached threads with what's currently unread/recent.
- * Keeps the AI category for threads we've already summarised, so they aren't sent again.
+ * Keeps the AI category and label for threads we've already summarised, so they aren't sent again.
  */
 export async function storeThreads(source: "gmail" | "icloud_mail", threads: FetchedThread[]): Promise<number> {
   const ids = threads.map((t) => `${source}:${t.threadId}`);
@@ -44,7 +44,9 @@ export async function storeThreads(source: "gmail" | "icloud_mail", threads: Fet
         .values(row)
         .onConflictDoUpdate({
           target: mailThread.id,
-          set: changed ? { ...row, category: null, summary: null, summarizedAt: null } : { unread: row.unread },
+          set: changed
+            ? { ...row, category: null, summary: null, summarizedAt: null, label: null, labelSource: null, labeledAt: null, suggestStar: false }
+            : { unread: row.unread },
         });
     }
   });

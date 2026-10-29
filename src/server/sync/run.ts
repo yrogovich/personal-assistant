@@ -7,8 +7,9 @@ import { feed, integration, syncRun, type Feed, type Provider } from "../db/sche
 import { env } from "../env";
 import type { SyncWindow } from "../integrations/calendar-store";
 import { syncGoogleCalendar } from "../integrations/google/calendar";
-import { summarizeNewMail } from "../ai/mail-summary";
-import { syncGmail } from "../integrations/google/gmail";
+import { applyMailRules, summarizeNewMail } from "../ai/mail-summary";
+import { applyGmailLabels, syncGmail } from "../integrations/google/gmail";
+import { detectPaymentProblems } from "../payments";
 import { syncHevy } from "../integrations/hevy";
 import { syncIcloudMail } from "../integrations/icloud/imap";
 import { syncIcloudCalendar } from "../integrations/icloud/caldav";
@@ -37,14 +38,22 @@ const SYNCERS: Partial<Record<Feed, Syncer>> = {
   strava: { provider: "strava", run: syncStrava },
   hevy: { provider: "hevy", run: syncHevy },
   reminders: { provider: "reminders", run: syncReminders },
-  gmail: { provider: "google", run: () => withMailSummary(syncGmail) },
+  gmail: { provider: "google", run: () => withMailSummary(syncGmail, applyGmailLabels) },
   icloud_mail: { provider: "icloud", run: () => withMailSummary(syncIcloudMail) },
 };
 
-/** Fetch, then triage new threads. A failed summary doesn't fail the mail sync; it retries next time. */
-async function withMailSummary(fetch: () => Promise<number>): Promise<number> {
+const warn = (what: string) => (err: unknown) => console.warn(`[mail] ${what} failed:`, err instanceof Error ? err.message : err);
+
+/**
+ * Fetch, then sort by rules, triage new threads, label them in the mailbox and check payment mail.
+ * A failed step after the fetch doesn't fail the mail sync; it retries next time.
+ */
+async function withMailSummary(fetch: () => Promise<number>, applyLabels?: () => Promise<number>): Promise<number> {
   const n = await fetch();
-  await summarizeNewMail().catch((err) => console.warn("[mail] summary failed:", err instanceof Error ? err.message : err));
+  await applyMailRules().catch(warn("rules"));
+  await summarizeNewMail().catch(warn("summary"));
+  if (applyLabels) await applyLabels().catch(warn("labels"));
+  await detectPaymentProblems().catch(warn("payment check"));
   return n;
 }
 
